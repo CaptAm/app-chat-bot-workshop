@@ -3,7 +3,7 @@
 const USERS="users.json";
 include (__DIR__ . '/vendor/autoload.php');
 
-// Užkrauname userius
+// UÅ¾krauname userius
 if (file_exists(USERS))
 {
   $users = json_decode(file_get_contents(USERS),true);
@@ -48,14 +48,8 @@ Array
 */
 
 
-// FB integracija nuo èia
-
-$access_token = 'EAACNqZA0hLBEBAPfGua5rezqGfldRhzWxLR6HdSXP9B98U6x8OZC8QIljXCL0jfrA3Leh1yxNFLm8NYKHEOgZBm1YXuRKjZCmbH649EwTOObJTzvT5D9QVCRMZCY3cZByWsNSWXlNFJN9hZCGRN4V1Gy7HbFRa0nFauhJ4XFZAcmigZDZD';
-$verify_token = 'TOKEN';
-// $verify_token = 'EAACNqZA0hLBEBAPfGua5rezqGfldRhzWxLR6HdSXP9B98U6x8OZC8QIljXCL0jfrA3Leh1yxNFLm8NYKHEOgZBm1YXuRKjZCmbH649EwTOObJTzvT5D9QVCRMZCY3cZByWsNSWXlNFJN9hZCGRN4V1Gy7HbFRa0nFauhJ4XFZAcmigZDZD';
-
-$appId = '155759625186321';
-$appSecret = '1cb2f5e6cff30e93f5b67882245d5e10';
+// FB integracija nuo ï¿½ia
+include('tokens.php');
 
 if(isset($_REQUEST['hub_challenge'])) {
     $challenge = $_REQUEST['hub_challenge'];
@@ -90,7 +84,6 @@ $data = [
             "content_type" => "text",
             "title" => "Atsakymas 1",
             "payload" => "ATS1"
-          ],
           [
             "content_type" => "text",
             "title" => "Atsakymas 2",
@@ -101,63 +94,52 @@ $data = [
 */
 ];
 
-$logged_user="";
-foreach ($users as $user_id => $user_data)
+if (!array_key_exists($sender,$users) || (strtolower($message)=="restart"))
 {
-  if ($user_data["sender"] == $sender)
-  { 
-    $logged_user=$user_id; 
-  }
-}
-
-if ($logged_user=="")
+  $users[$sender]["correct"]=0;
+  $users[$sender]["incorrect"]=0;
+  $users[$sender]["right_answer"]="";
+ }
+else
 {
-// tODO: I VIENA IRASA
-  $users[]["sender"]=$sender;
-  $users[]["correct"]=0;
-  $users[]["incorrect"]=0;
-
-  // Cia reikia $logged_user nustatyti i paskutini elementa
-  foreach ($users as $user_id => $user_data)
-  {
-    if ($user_data["sender"] == $sender)
-    { $logged_user=$user_id; }
-  }
-}
-else 
-{
-    if ($message==$users[$logged_user]["right_answer"])
+    if ($users[$sender]["right_answer"]!="")
     {
-       $data["message"]["text"]="Teisingai!";
-       $users[$logged_user]["correct"]++;
+      if ($message==$users[$sender]["right_answer"])
+      {
+         $data["message"]["text"]="Teisingai!";
+         $users[$sender]["correct"]++;
+      }
+      else 
+      {
+         $data["message"]["text"]="Neteisingai :(";
+         $users[$sender]["incorrect"]++;
+          $response = $fb->post('/me/messages', $data, $access_token);
+          $data["message"]["text"]="Teisingas atsakymas:".$users[$sender]["right_answer"];
+
+      }
+      $response = $fb->post('/me/messages', $data, $access_token);
+
+      $data["message"]["text"]="Teisingai: ".$users[$sender]["correct"];
+      $response = $fb->post('/me/messages', $data, $access_token);
+
+      $data["message"]["text"]="Neteisingai: ".$users[$sender]["incorrect"];
+      $response = $fb->post('/me/messages', $data, $access_token);
     }
-    else 
-    {
-       $data["message"]["text"]="Neteisingai :(";
-       $users[$logged_user]["incorrect"]++;
-    }
-    $response = $fb->post('/me/messages', $data, $access_token);
-
-    $data["message"]["text"]="Teisingai: ".$users[$logged_user]["correct"];
-    $response = $fb->post('/me/messages', $data, $access_token);
-
-    $data["message"]["text"]="Neteisingai: ".$users[$logged_user]["incorrect"];
-    $response = $fb->post('/me/messages', $data, $access_token);
-
     $message='Gauti klausima';
 }
 
 if ($message=='Gauti klausima')
 {
   $data["message"]["text"]=html_entity_decode($question["question"]);
+  $answers[]=$question["correct_answer"];
+  $users[$sender]["right_answer"]=$question["correct_answer"];
 
-  $qreply["content_type"]="text";
-  $qreply["title"]=$question["correct_answer"];
-  $qreply["payload"]=$question["correct_answer"];
-  $data["message"]["quick_replies"][]=$qreply;
-  $users[$logged_user]["right_answer"]=$question["correct_answer"];
+  foreach ($question["incorrect_answers"] as $key => $value) {
+      $answers[]=$value;
+  }
+  shuffle($answers);
 
-  foreach ($question["incorrect_answers"] as $key => $value)
+  foreach ($answers as $key => $value)
   {
     $qreply["content_type"]="text";
     $qreply["title"]=$value;
@@ -167,7 +149,7 @@ if ($message=='Gauti klausima')
 }
 else 
 {
-  $data["message"]["text"]="Pradedam zaisti?";
+  $data["message"]["text"]="Pradedame Å¾aisti?";
   $qreply["content_type"]="text";
   $qreply["title"]="Gauti klausima";
   $qreply["payload"]="Klausimas";
@@ -198,7 +180,7 @@ echo("<hr>");
 
 $response = $fb->post('/me/messages', $data, $access_token);
 
-// Išsaugojame userius
+// Iï¿½saugojame userius
 $fp = fopen(USERS, 'w');
 fwrite($fp, json_encode($users));
 fclose($fp);
