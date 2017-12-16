@@ -3,6 +3,7 @@
     "description": "A simple chat bot Workshop",
     "type": "project",
     "require": {
-        "facebook/graph-sdk": "^5.6"
-    }
+        "facebook/graph-sdk": "^5.6",
+        "guzzlehttp/guzzle": "~6.0"
+   }
 }
