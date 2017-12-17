@@ -10,7 +10,7 @@ include(__DIR__ . '/vendor/autoload.php');
 
 $userManager=new user_manager();
 /** @var \bot\TriviaProviderInterface $questionManager */
-// $questionManager = new question_manager_api();
+ $questionManager = new question_manager_api(new \GuzzleHttp\Client());
 $questionManager = new question_manager_file();
 
 // FB integracija nuo �ia

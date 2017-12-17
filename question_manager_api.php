@@ -7,14 +7,20 @@
  */
 
 namespace bot;
-use GuzzleHttp\Client;
+use GuzzleHttp\ClientInterface;
 
 class question_manager_api implements TriviaProviderInterface
 {
+    private $client;
+
+    public function __construct(ClientInterface $client)
+    {
+        $this->client = $client;
+    }
+
     public function readTriviaQuestion()
     {
-        $client = new Client();
-        $res = $client->get('https://opentdb.com/api.php?amount=1&difficulty=easy');
+        $res = $this->client->get('https://opentdb.com/api.php?amount=1&difficulty=easy');
         $parse = $res->json();
         $question = $parse["results"]["0"];
 

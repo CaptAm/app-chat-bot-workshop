@@ -10,5 +10,13 @@
         "psr-4": {
             "bot\\": ""
         }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "bot\\test\\": "test"
+        }
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^6.5"
     }
 }
