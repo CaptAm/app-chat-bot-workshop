@@ -1,60 +1,26 @@
 <?php
 
-const USERS="users.json";
-include (__DIR__ . '/vendor/autoload.php');
+use bot\user;
+use bot\user_manager;
+use bot\question;
+use bot\question_manager_api;
+use bot\question_manager_file;
 
-// Užkrauname userius
-if (file_exists(USERS))
-{
-  $users = json_decode(file_get_contents(USERS),true);
-}
+include(__DIR__ . '/vendor/autoload.php');
 
-// Testuojam Trivia
-$client = new GuzzleHttp\Client();
-$res = $client->get('https://opentdb.com/api.php?amount=1&difficulty=easy');
-// echo $res->getStatusCode();
-// "200"
-// echo $res->getHeader('content-type');
-// 'application/json; charset=utf8'
-//echo $res->getBody();
-// {"type":"User"...'
-//echo "<hr>";
-// $parse=json_decode($res->get(), true);
-
- $parse=$res->json();
- $question=$parse["results"]["0"];
-// Outputs the JSON decoded data
-
-/*
-echo "<pre>";
-print_r($question);
-echo "</pre>";
-
-Array
-(
-    [category] => Geography
-    [type] => multiple
-    [difficulty] => easy
-    [question] => Which nation claims ownership of Antarctica?
-    [correct_answer] => No one, but there are claims.
-    [incorrect_answers] => Array
-        (
-            [0] => United States of America
-            [1] => United Nations
-            [2] => Australia
-        )
-
-)
-*/
-
+$userManager=new user_manager();
+/** @var \bot\TriviaProviderInterface $questionManager */
+// $questionManager = new question_manager_api();
+$questionManager = new question_manager_file();
 
 // FB integracija nuo �ia
 include('tokens.php');
 
-if(isset($_REQUEST['hub_challenge'])) {
+if (isset($_REQUEST['hub_challenge'])) {
     $challenge = $_REQUEST['hub_challenge'];
     if ($_REQUEST['hub_verify_token'] === $verify_token) {
-        echo $challenge; die();
+        echo $challenge;
+        die();
     }
 }
 
@@ -77,112 +43,77 @@ $data = [
     'recipient' => [
         'id' => $sender,
     ],
-/*    'message' => [
-        'text' => 'You wrote: ' . $message,
-        'quick_replies' => [
-          [
-            "content_type" => "text",
-            "title" => "Atsakymas 1",
-            "payload" => "ATS1"
-          [
-            "content_type" => "text",
-            "title" => "Atsakymas 2",
-            "payload" => "ATS2"
-          ]
-        ] 
-    ]
-*/
+    /*    'message' => [
+            'text' => 'You wrote: ' . $message,
+            'quick_replies' => [
+              [
+                "content_type" => "text",
+                "title" => "Atsakymas 1",
+                "payload" => "ATS1"
+              [
+                "content_type" => "text",
+                "title" => "Atsakymas 2",
+                "payload" => "ATS2"
+              ]
+            ]
+        ]
+    */
 ];
 
-if (!array_key_exists($sender,$users) || (strtolower($message)=="restart"))
-{
-  $users[$sender]["correct"]=0;
-  $users[$sender]["incorrect"]=0;
-  $users[$sender]["right_answer"]="";
- }
-else
-{
-    if ($users[$sender]["right_answer"]!="")
-    {
-      if ($message==$users[$sender]["right_answer"])
-      {
-         $data["message"]["text"]="Teisingai!";
-         $users[$sender]["correct"]++;
-      }
-      else 
-      {
-         $data["message"]["text"]="Neteisingai :(";
-         $users[$sender]["incorrect"]++;
-          $response = $fb->post('/me/messages', $data, $access_token);
-          $data["message"]["text"]="Teisingas atsakymas:".$users[$sender]["right_answer"];
+$user=$userManager->getUser($sender);
 
-      }
-      $response = $fb->post('/me/messages', $data, $access_token);
+if (($user==NULL) || (strtolower($message) == "restart")) {
+    $user=new user($sender, 0, 0, "");
+} else {
+    if ($user->getRightAnswer() != "") {
+        if ($user->isRightAnswer($message)) {
+            $data["message"]["text"] = "Teisingai!";
+            $user->incCorrectAnswers();
+        } else {
+            $data["message"]["text"] = "Neteisingai :(";
+            $user->incIncorrectAnswers();
+            $response = $fb->post('/me/messages', $data, $access_token);
+            $data["message"]["text"] = "Teisingas atsakymas:" . $user->getRightAnswer();
+        }
+        $response = $fb->post('/me/messages', $data, $access_token);
 
-      $data["message"]["text"]="Teisingai: ".$users[$sender]["correct"];
-      $response = $fb->post('/me/messages', $data, $access_token);
+        $data["message"]["text"] = "Teisingai: " . $user->getCorrectAnswers();
+        $response = $fb->post('/me/messages', $data, $access_token);
 
-      $data["message"]["text"]="Neteisingai: ".$users[$sender]["incorrect"];
-      $response = $fb->post('/me/messages', $data, $access_token);
+        $data["message"]["text"] = "Neteisingai: " . $user->getIncorrectAnswers();
+        $response = $fb->post('/me/messages', $data, $access_token);
     }
-    $message='Gauti klausima';
+    $message = 'Gauti klausima';
 }
 
-if ($message=='Gauti klausima')
-{
-  $data["message"]["text"]=html_entity_decode($question["question"]);
-  $answers[]=$question["correct_answer"];
-  $users[$sender]["right_answer"]=$question["correct_answer"];
+if ($message == 'Gauti klausima') {
+    $question=$questionManager->readTriviaQuestion();
 
-  foreach ($question["incorrect_answers"] as $key => $value) {
-      $answers[]=$value;
-  }
-  shuffle($answers);
+    $data["message"]["text"] = $question->getQuestion();
+    $answers[] = $question->getRightAnswer();
+    $user->setRightAnswer($question->getRightAnswer());
 
-  foreach ($answers as $key => $value)
-  {
-    $qreply["content_type"]="text";
-    $qreply["title"]=$value;
-    $qreply["payload"]=$value;
-    $data["message"]["quick_replies"][]=$qreply;
-  }
+    foreach ($question->getIncorrectAnswers() as $key => $value) {
+        $answers[] = $value;
+    }
+    shuffle($answers);
+
+    foreach ($answers as $key => $value) {
+        $qreply["content_type"] = "text";
+        $qreply["title"] = $value;
+        $qreply["payload"] = $value;
+        $data["message"]["quick_replies"][] = $qreply;
+    }
+} else {
+    $data["message"]["text"] = "Pradedame žaisti?";
+    $qreply["content_type"] = "text";
+    $qreply["title"] = "Gauti klausima";
+    $qreply["payload"] = "Klausimas";
+    $data["message"]["quick_replies"][] = $qreply;
 }
-else 
-{
-  $data["message"]["text"]="Pradedame žaisti?";
-  $qreply["content_type"]="text";
-  $qreply["title"]="Gauti klausima";
-  $qreply["payload"]="Klausimas";
-  $data["message"]["quick_replies"][]=$qreply;
-}
-
-/*
-echo "<pre>";
-print_r($data);
-echo "</pre>";
-
-
-/*
-echo "<pre>";
-print_r($question);
-echo "</pre>";
-echo "<hr>";
-
-echo "Kategorija: ".$question["category"]."<br>";
-echo "Sunkumas: ".$question["difficulty"]."<br>";
-echo "Klausimas: <b>".$question["question"]."</b><br>";
-
-$questions[]=$question;
-echo("<pre>");
-print_r($users);
-echo("<hr>");
-*/
 
 $response = $fb->post('/me/messages', $data, $access_token);
 
-// I�saugojame userius
-$fp = fopen(USERS, 'w');
-fwrite($fp, json_encode($users));
-fclose($fp);
+$userManager->saveUser($user);
 
 ?>
